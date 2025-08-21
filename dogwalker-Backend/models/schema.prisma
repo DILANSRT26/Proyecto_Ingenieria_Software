@@ -1,0 +1,182 @@
+// models/schema.prisma - Esquema de base de datos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tipos de usuario
+enum UserType {
+  OWNER    // Dueño de perros
+  WALKER   // Paseador
+  ADMIN    // Administrador
+}
+
+// Estados del servicio
+enum ServiceStatus {
+  PENDING    // Esperando paseador
+  ACCEPTED   // Paseador asignado
+  IN_PROGRESS // En proceso
+  COMPLETED  // Completado
+  CANCELLED  // Cancelado
+}
+
+// Modelo de Usuario
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  phone     String?
+  avatar    String?
+  userType  UserType
+  isActive  Boolean  @default(true)
+  
+  // Datos específicos para paseadores
+  description String?
+  experience  Int?     // años de experiencia
+  hourlyRate  Float?   // tarifa por hora
+  
+  // Ubicación
+  address   String?
+  city      String?
+  latitude  Float?
+  longitude Float?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relaciones
+  dogs          Dog[]           // Perros (si es dueño)
+  servicesAsOwner    Service[] @relation("ServiceOwner")
+  servicesAsWalker   Service[] @relation("ServiceWalker")
+  sentMessages      Message[] @relation("MessageSender")
+  receivedMessages  Message[] @relation("MessageReceiver")
+  reviewsGiven      Review[]  @relation("ReviewFrom")
+  reviewsReceived   Review[]  @relation("ReviewTo")
+  
+  @@map("users")
+}
+
+// Modelo de Perro
+model Dog {
+  id          String  @id @default(cuid())
+  name        String
+  breed       String
+  age         Int
+  weight      Float
+  size        String  // small, medium, large
+  description String?
+  photo       String?
+  
+  // Comportamiento y necesidades especiales
+  isAggressive    Boolean @default(false)
+  needsLeash      Boolean @default(true)
+  specialNeeds    String?
+  medicalNotes    String?
+  
+  // Relaciones
+  owner    User      @relation(fields: [ownerId], references: [id])
+  ownerId  String
+  services Service[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("dogs")
+}
+
+// Modelo de Servicio
+model Service {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  
+  // Horario
+  scheduledDate DateTime
+  duration      Int         // duración en minutos
+  
+  // Ubicación
+  pickupAddress String
+  returnAddress String?     // si es diferente al pickup
+  latitude      Float?
+  longitude     Float?
+  
+  // Precio
+  price         Float?
+  finalPrice    Float?      // precio acordado final
+  
+  // Estado
+  status        ServiceStatus @default(PENDING)
+  
+  // Relaciones
+  owner    User   @relation("ServiceOwner", fields: [ownerId], references: [id])
+  ownerId  String
+  
+  walker   User?   @relation("ServiceWalker", fields: [walkerId], references: [id])
+  walkerId String?
+  
+  dog      Dog     @relation(fields: [dogId], references: [id])
+  dogId    String
+  
+  messages Message[]
+  reviews  Review[]
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("services")
+}
+
+// Modelo de Mensaje (Chat)
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  isRead    Boolean  @default(false)
+  
+  // Relaciones
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
+  senderId  String
+  
+  receiver  User     @relation("MessageReceiver", fields: [receiverId], references: [id])
+  receiverId String
+  
+  service   Service  @relation(fields: [serviceId], references: [id])
+  serviceId String
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@map("messages")
+}
+
+// Modelo de Reseña
+model Review {
+  id      String @id @default(cuid())
+  rating  Int    // 1-5 estrellas
+  comment String?
+  
+  // Relaciones
+  from      User    @relation("ReviewFrom", fields: [fromId], references: [id])
+  fromId    String
+  
+  to        User    @relation("ReviewTo", fields: [toId], references: [id])
+  toId      String
+  
+  service   Service @relation(fields: [serviceId], references: [id])
+  serviceId String
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@unique([fromId, toId, serviceId]) // Una reseña por servicio
+  @@map("reviews")
+}
